@@ -154,7 +154,7 @@ export class SkillInvokerService {
           })
         : [];
 
-    return [new HumanMessage({ content: messageContent }), ...aiMessages];
+    return [new HumanMessage({ content: messageContent } as any), ...aiMessages];
   }
 
   private async buildInvokeConfig(
@@ -961,6 +961,7 @@ export class SkillInvokerService {
           case 'on_chat_model_end':
             if (runMeta && chunk) {
               this.logger.info(`ls_model_name: ${String(runMeta.ls_model_name)}`);
+
               const providerItem = await this.providerService.findLLMProviderItemByModelID(
                 user,
                 String(runMeta.ls_model_name),
@@ -968,18 +969,67 @@ export class SkillInvokerService {
               if (!providerItem) {
                 this.logger.error(`model not found: ${String(runMeta.ls_model_name)}`);
               }
+
+              // Extract routing data if model was routed (e.g., from Auto model)
+              const config =
+                typeof data.providerItem?.config === 'string'
+                  ? safeParseJSON(data.providerItem?.config)
+                  : data.providerItem?.config;
+              const routedData = config?.routedData;
+
+              // Type assertions for usage metadata
+              const usageMetadata = chunk.usage_metadata as any;
+              const responseMetadata = chunk.response_metadata as any;
+
+              // Extract cache-related tokens from different possible sources
+              // AWS Bedrock uses multiple possible field names:
+              //   - cacheReadInputTokenCount (singular, without 's')
+              //   - cacheReadInputTokens (plural, with 's')
+              //   - cacheReadInputTokensCount (legacy)
+              // Anthropic (via LangChain) uses: input_token_details.cache_read
+              const bedrockUsage = responseMetadata?.metadata?.usage;
+
+              const inputTokens = usageMetadata?.input_tokens ?? 0;
+              const outputTokens = usageMetadata?.output_tokens ?? 0;
+              const cacheReadTokens =
+                usageMetadata?.input_token_details?.cache_read ??
+                bedrockUsage?.cacheReadInputTokenCount ??
+                bedrockUsage?.cacheReadInputTokens ??
+                bedrockUsage?.cacheReadInputTokensCount ??
+                0;
+              const cacheWriteTokens =
+                usageMetadata?.input_token_details?.cache_creation ??
+                bedrockUsage?.cacheWriteInputTokenCount ??
+                bedrockUsage?.cacheWriteInputTokens ??
+                bedrockUsage?.cacheWriteInputTokensCount ??
+                0;
+
+              // According to AWS Bedrock semantics (https://docs.aws.amazon.com/bedrock/latest/userguide/quotas-token-burndown.html):
+              // - InputTokenCount: tokens that need to be processed by the model (billable at full rate)
+              // - CacheReadInputTokens: tokens retrieved from cache (billable at discounted rate)
+              // - CacheWriteInputTokens: tokens written to cache
+              // These are separate categories, NOT a total that needs to be subtracted.
+              // Formula: totalTokens = inputTokens + cacheReadTokens + outputTokens
               const usage: TokenUsageItem = {
                 tier: providerItem?.tier,
                 modelProvider: providerItem?.provider?.name,
                 modelName: String(runMeta.ls_model_name),
                 modelLabel: providerItem?.name,
                 providerItemId: providerItem?.itemId,
-                inputTokens:
-                  (chunk.usage_metadata?.input_tokens ?? 0) -
-                  (chunk.usage_metadata?.input_token_details?.cache_read ?? 0),
-                outputTokens: chunk.usage_metadata?.output_tokens ?? 0,
-                cacheReadTokens: chunk.usage_metadata?.input_token_details?.cache_read ?? 0,
+                originalModelId: routedData?.originalModelId,
+                modelRoutedData: routedData,
+                inputTokens,
+                outputTokens,
+                cacheReadTokens,
+                cacheWriteTokens,
               };
+
+              if (cacheReadTokens > 0) {
+                this.logger.info(
+                  `Prompt cache hit, model: ${usage.modelName}, inputTokens: ${usage.inputTokens}, outputTokens: ${usage.outputTokens}, cacheReadTokens: ${usage.cacheReadTokens}, cacheWriteTokens: ${usage.cacheWriteTokens}`,
+                );
+              }
+
               resultAggregator.addUsageItem(runMeta, usage);
 
               // Get the current AI message ID before finalizing
@@ -988,8 +1038,8 @@ export class SkillInvokerService {
               // Record usage metadata for message persistence
               if (messageAggregator.hasCurrentAIMessage()) {
                 messageAggregator.setAIMessageUsage(
-                  chunk.usage_metadata?.input_tokens ?? 0,
-                  chunk.usage_metadata?.output_tokens ?? 0,
+                  usageMetadata?.input_tokens ?? 0,
+                  usageMetadata?.output_tokens ?? 0,
                 );
 
                 // Finalize the current AI message
@@ -1452,6 +1502,8 @@ export class SkillInvokerService {
 
       const inputTokens = encode(input.query || '').length;
       const outputTokens = encode(generatedContent).length;
+      const cacheReadTokens = 0;
+      const cacheWriteTokens = 0;
 
       const usage: TokenUsageItem = {
         tier: providerItem?.tier,
@@ -1461,6 +1513,8 @@ export class SkillInvokerService {
         providerItemId: providerItem?.itemId,
         inputTokens,
         outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
       };
 
       resultAggregator.addUsageItem(runMeta, usage);

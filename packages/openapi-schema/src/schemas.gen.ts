@@ -2048,6 +2048,10 @@ export const TokenUsageItemSchema = {
       type: 'number',
       description: 'Cache read tokens',
     },
+    cacheWriteTokens: {
+      type: 'number',
+      description: 'Cache write tokens',
+    },
     providerItemId: {
       type: 'string',
       description: 'Provider item ID',
@@ -2056,6 +2060,45 @@ export const TokenUsageItemSchema = {
       type: 'string',
       description: 'Model tier',
       deprecated: true,
+    },
+    originalModelId: {
+      type: 'string',
+      description: "Original model ID before routing (e.g., 'auto')",
+    },
+    modelRoutedData: {
+      type: 'object',
+      description: 'Complete model routing metadata (JSON)',
+      properties: {
+        isRouted: {
+          type: 'boolean',
+          description: 'Whether this request was routed',
+        },
+        originalItemId: {
+          type: 'string',
+          description: 'Original provider item ID before routing',
+        },
+        originalModelId: {
+          type: 'string',
+          description: "Original model ID (e.g., 'auto')",
+        },
+        originalProvider: {
+          type: 'string',
+          description: 'Original model provider name',
+        },
+        originalModelName: {
+          type: 'string',
+          description: 'Original model name/label for display',
+        },
+        routedAt: {
+          type: 'string',
+          format: 'date-time',
+          description: 'Routing timestamp',
+        },
+        routingStrategy: {
+          type: 'string',
+          description: "Routing strategy used (e.g., 'auto', 'load_balance', 'region')",
+        },
+      },
     },
   },
 } as const;
@@ -10422,6 +10465,56 @@ export const ListWorkflowAppsResponseSchema = {
           description: 'List of workflow apps',
           items: {
             $ref: '#/components/schemas/WorkflowApp',
+          },
+        },
+      },
+    },
+  ],
+} as const;
+
+export const TemplateGenerationStatusSchema = {
+  type: 'string',
+  description: 'Template generation status',
+  enum: ['idle', 'pending', 'generating', 'completed', 'failed'],
+  example: 'completed',
+} as const;
+
+export const GetTemplateGenerationStatusResponseSchema = {
+  allOf: [
+    {
+      $ref: '#/components/schemas/BaseResponse',
+    },
+    {
+      type: 'object',
+      required: ['data'],
+      properties: {
+        data: {
+          type: 'object',
+          required: ['status', 'updatedAt', 'createdAt'],
+          properties: {
+            status: {
+              $ref: '#/components/schemas/TemplateGenerationStatus',
+            },
+            templateContent: {
+              type: 'string',
+              nullable: true,
+              description: 'Generated template content',
+            },
+            error: {
+              type: 'string',
+              nullable: true,
+              description: 'Error message if generation failed',
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Last update time',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Creation time',
+            },
           },
         },
       },

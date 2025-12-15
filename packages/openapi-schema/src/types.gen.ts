@@ -1560,6 +1560,10 @@ export type TokenUsageItem = {
    */
   cacheReadTokens?: number;
   /**
+   * Cache write tokens
+   */
+  cacheWriteTokens?: number;
+  /**
    * Provider item ID
    */
   providerItemId?: string;
@@ -1568,6 +1572,43 @@ export type TokenUsageItem = {
    * @deprecated
    */
   tier?: string;
+  /**
+   * Original model ID before routing (e.g., 'auto')
+   */
+  originalModelId?: string;
+  /**
+   * Complete model routing metadata (JSON)
+   */
+  modelRoutedData?: {
+    /**
+     * Whether this request was routed
+     */
+    isRouted?: boolean;
+    /**
+     * Original provider item ID before routing
+     */
+    originalItemId?: string;
+    /**
+     * Original model ID (e.g., 'auto')
+     */
+    originalModelId?: string;
+    /**
+     * Original model provider name
+     */
+    originalProvider?: string;
+    /**
+     * Original model name/label for display
+     */
+    originalModelName?: string;
+    /**
+     * Routing timestamp
+     */
+    routedAt?: string;
+    /**
+     * Routing strategy used (e.g., 'auto', 'load_balance', 'region')
+     */
+    routingStrategy?: string;
+  };
 };
 
 /**
@@ -7430,6 +7471,33 @@ export type ListWorkflowAppsResponse = BaseResponse & {
   data?: Array<WorkflowApp>;
 };
 
+/**
+ * Template generation status
+ */
+export type TemplateGenerationStatus = 'idle' | 'pending' | 'generating' | 'completed' | 'failed';
+
+export type GetTemplateGenerationStatusResponse = BaseResponse & {
+  data: {
+    status: TemplateGenerationStatus;
+    /**
+     * Generated template content
+     */
+    templateContent?: string | null;
+    /**
+     * Error message if generation failed
+     */
+    error?: string | null;
+    /**
+     * Last update time
+     */
+    updatedAt: string;
+    /**
+     * Creation time
+     */
+    createdAt: string;
+  };
+};
+
 export type ExecuteWorkflowAppRequest = {
   /**
    * Workflow app share ID for execution
@@ -10808,6 +10876,19 @@ export type ListWorkflowAppsData = {
 export type ListWorkflowAppsResponse2 = ListWorkflowAppsResponse;
 
 export type ListWorkflowAppsError = unknown;
+
+export type GetTemplateGenerationStatusData = {
+  query: {
+    /**
+     * Workflow app ID
+     */
+    appId: string;
+  };
+};
+
+export type GetTemplateGenerationStatusResponse2 = GetTemplateGenerationStatusResponse;
+
+export type GetTemplateGenerationStatusError = unknown;
 
 export type GetSettingsResponse = GetUserSettingsResponse;
 
